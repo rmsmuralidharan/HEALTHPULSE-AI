@@ -1,0 +1,17 @@
+numpy
+pandas
+scipy
+wfdb
+scikit-learn
+xgboost
+tensorflow
+matplotlib
+seaborn
+mlflow
+fastapi
+uvicorn
+pymongo
+python-dotenv
+pytest
+setuptools
+ipykernel

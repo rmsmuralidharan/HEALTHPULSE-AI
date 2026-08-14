@@ -1,0 +1,41 @@
+Metadata-Version: 2.4
+Name: HealthPulse-AI
+Version: 0.0.1
+Summary: ECG-based Myocardial Infarction detection using Machine Learning and Deep Learning
+Home-page: https://github.com/rmsmuralidharan/HealthPulse-AI
+Author: Muralidharan RMS
+Author-email: rmsmuralidaran@gmail.com
+License: MIT
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Intended Audience :: Healthcare Industry
+Classifier: Topic :: Scientific/Engineering :: Medical Science Apps.
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: scipy
+Requires-Dist: wfdb
+Requires-Dist: scikit-learn
+Requires-Dist: xgboost
+Requires-Dist: tensorflow
+Requires-Dist: matplotlib
+Requires-Dist: seaborn
+Requires-Dist: mlflow
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: pymongo
+Requires-Dist: python-dotenv
+Requires-Dist: pytest
+Requires-Dist: setuptools
+Requires-Dist: ipykernel
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: summary
