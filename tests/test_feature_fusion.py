@@ -21,10 +21,6 @@ from HealthPulse_AI_project.components.metadata_preprocessing import (
     MetaDataPreprocessing
 )
 
-from HealthPulse_AI_project.components.metadata_feature_engineering import (
-    MetadataFeatureEngineering
-)
-
 from HealthPulse_AI_project.components.ecg_feature_engineering import (
     ECGFeatureEngineering
 )
@@ -112,12 +108,10 @@ if __name__ == "__main__":
     )
 
     # ==========================================
-    # 6. ECG feature engineering
+    # 6. ECG Feature Engineering
     # ==========================================
 
-    ecg_feature_engineering = (
-        ECGFeatureEngineering()
-    )
+    ecg_fe = ECGFeatureEngineering()
 
     (
         train_ecg_features,
@@ -127,13 +121,10 @@ if __name__ == "__main__":
         _,
         _,
         _
-    ) = (
-        ecg_feature_engineering
-        .initiate_ecg_feature_engineering(
-            X_train,
-            X_validation,
-            X_test
-        )
+    ) = ecg_fe.initiate_ecg_feature_engineering(
+        X_train,
+        X_validation,
+        X_test
     )
 
     # ==========================================
@@ -145,49 +136,33 @@ if __name__ == "__main__":
     )
 
     (
-        _,
-        _,
-        _,
-        _
-    ) = metadata_preprocessing.initiate_metadata_preprocessing(
-        train_df,
-        validation_df,
-        test_df
-    )
-
-    # Get imputed DataFrames
-
-    train_imputed_df = (
-        metadata_preprocessing.train_imputed_df
-    )
-
-    validation_imputed_df = (
-        metadata_preprocessing.validation_imputed_df
-    )
-
-    test_imputed_df = (
-        metadata_preprocessing.test_imputed_df
-    )
-
-    # ==========================================
-    # 8. Metadata feature engineering
-    # ==========================================
-
-    metadata_feature_engineering = (
-        MetadataFeatureEngineering()
-    )
-
-    (
-        train_metadata_features,
-        validation_metadata_features,
-        test_metadata_features
+        X_train_metadata,
+        X_validation_metadata,
+        X_test_metadata,
+        metadata_feature_names
     ) = (
-        metadata_feature_engineering
-        .initiate_feature_engineering(
-            train_imputed_df,
-            validation_imputed_df,
-            test_imputed_df
+        metadata_preprocessing
+        .initiate_metadata_preprocessing(
+            train_df,
+            validation_df,
+            test_df
         )
+    )
+
+    # ==========================================
+    # 8. ECG IDs
+    # ==========================================
+
+    train_ecg_ids = (
+        train_df["ecg_id"].to_numpy()
+    )
+
+    validation_ecg_ids = (
+        validation_df["ecg_id"].to_numpy()
+    )
+
+    test_ecg_ids = (
+        test_df["ecg_id"].to_numpy()
     )
 
     # ==========================================
@@ -199,22 +174,34 @@ if __name__ == "__main__":
     (
         train_fused,
         validation_fused,
-        test_fused
+        test_fused,
+        train_target,
+        validation_target,
+        test_target,
+        train_ids,
+        validation_ids,
+        test_ids
     ) = fusion.initiate_feature_fusion(
+
         train_ecg_features,
         validation_ecg_features,
         test_ecg_features,
-        ecg_feature_names,
-        train_metadata_features,
-        validation_metadata_features,
-        test_metadata_features,
-        train_df,
-        validation_df,
-        test_df
+
+        X_train_metadata,
+        X_validation_metadata,
+        X_test_metadata,
+
+        y_train,
+        y_validation,
+        y_test,
+
+        train_ecg_ids,
+        validation_ecg_ids,
+        test_ecg_ids
     )
 
     # ==========================================
-    # 10. Display results
+    # 10. Results
     # ==========================================
 
     print("\n")
@@ -226,221 +213,217 @@ if __name__ == "__main__":
     print("-" * 60)
 
     print(
-        f"Shape : {train_fused.shape}"
+        f"ECG features      : "
+        f"{train_ecg_features.shape}"
+    )
+
+    print(
+        f"Metadata features : "
+        f"{X_train_metadata.shape}"
+    )
+
+    print(
+        f"Fused features    : "
+        f"{train_fused.shape}"
     )
 
     print("\nVALIDATION")
     print("-" * 60)
 
     print(
-        f"Shape : {validation_fused.shape}"
+        f"ECG features      : "
+        f"{validation_ecg_features.shape}"
+    )
+
+    print(
+        f"Metadata features : "
+        f"{X_validation_metadata.shape}"
+    )
+
+    print(
+        f"Fused features    : "
+        f"{validation_fused.shape}"
     )
 
     print("\nTEST")
     print("-" * 60)
 
     print(
-        f"Shape : {test_fused.shape}"
-    )
-
-    # ==========================================
-    # 11. Display columns
-    # ==========================================
-
-    print("\nFEATURE INFORMATION")
-    print("-" * 60)
-
-    print(
-        f"Total columns : "
-        f"{len(train_fused.columns)}"
+        f"ECG features      : "
+        f"{test_ecg_features.shape}"
     )
 
     print(
-        f"ECG features  : "
-        f"{len(ecg_feature_names)}"
+        f"Metadata features : "
+        f"{X_test_metadata.shape}"
     )
 
-    print("\nFirst 20 columns:")
-
     print(
-        train_fused.columns[:20].tolist()
+        f"Fused features    : "
+        f"{test_fused.shape}"
     )
 
     # ==========================================
-    # 12. Target distribution
+    # 11. Target distribution
     # ==========================================
 
     print("\nTARGET DISTRIBUTION")
     print("-" * 60)
 
     print(
-        train_fused["Target"]
-        .value_counts()
-        .sort_index()
+        "TRAIN:"
+    )
+
+    print(
+        np.unique(
+            train_target,
+            return_counts=True
+        )
+    )
+
+    print(
+        "VALIDATION:"
+    )
+
+    print(
+        np.unique(
+            validation_target,
+            return_counts=True
+        )
+    )
+
+    print(
+        "TEST:"
+    )
+
+    print(
+        np.unique(
+            test_target,
+            return_counts=True
+        )
     )
 
     # ==========================================
-    # 13. Validation checks
+    # 12. Validation checks
     # ==========================================
-
-    # ------------------------------------------
-    # Shape validation
-    # ------------------------------------------
 
     shape_validation = (
-        len(train_fused) == len(train_df)
+        train_fused.shape
+        == (15270, 172)
         and
-        len(validation_fused)
-        == len(validation_df)
+        validation_fused.shape
+        == (3251, 172)
         and
-        len(test_fused)
-        == len(test_df)
+        test_fused.shape
+        == (3278, 172)
     )
 
-    # ------------------------------------------
-    # ECG feature count
-    # ------------------------------------------
-
-    ecg_feature_validation = all(
-        feature in train_fused.columns
-        for feature in ecg_feature_names
+    feature_count_validation = (
+        train_ecg_features.shape[1] == 84
+        and
+        X_train_metadata.shape[1] == 88
+        and
+        train_fused.shape[1] == 172
     )
 
-    # ------------------------------------------
-    # BMI validation
-    # ------------------------------------------
+    row_count_validation = (
+        train_fused.shape[0]
+        == len(y_train)
+        == len(train_ids)
 
-    bmi_validation = (
-        "BMI" in train_fused.columns
         and
-        "BMI" in validation_fused.columns
-        and
-        "BMI" in test_fused.columns
-    )
+        validation_fused.shape[0]
+        == len(y_validation)
+        == len(validation_ids)
 
-    # ------------------------------------------
-    # Target validation
-    # ------------------------------------------
-
-    target_validation = (
-        "Target" in train_fused.columns
         and
-        "Target" in validation_fused.columns
-        and
-        "Target" in test_fused.columns
-        and
-        train_fused["Target"].isin([0, 1]).all()
-        and
-        validation_fused["Target"].isin([0, 1]).all()
-        and
-        test_fused["Target"].isin([0, 1]).all()
-    )
-
-    # ------------------------------------------
-    # ECG ID validation
-    # ------------------------------------------
-
-    ecg_id_validation = (
-        "ecg_id" in train_fused.columns
-        and
-        "ecg_id" in validation_fused.columns
-        and
-        "ecg_id" in test_fused.columns
-        and
-        train_fused["ecg_id"].is_unique
-        and
-        validation_fused["ecg_id"].is_unique
-        and
-        test_fused["ecg_id"].is_unique
-    )
-
-    # ------------------------------------------
-    # No NaN / Inf
-    # ------------------------------------------
-
-    numeric_train = (
-        train_fused
-        .select_dtypes(include=[np.number])
-    )
-
-    numeric_validation = (
-        validation_fused
-        .select_dtypes(include=[np.number])
-    )
-
-    numeric_test = (
-        test_fused
-        .select_dtypes(include=[np.number])
+        test_fused.shape[0]
+        == len(y_test)
+        == len(test_ids)
     )
 
     finite_validation = (
         np.isfinite(
-            numeric_train.to_numpy()
+            train_fused
         ).all()
         and
         np.isfinite(
-            numeric_validation.to_numpy()
+            validation_fused
         ).all()
         and
         np.isfinite(
-            numeric_test.to_numpy()
+            test_fused
         ).all()
     )
 
-    # ------------------------------------------
-    # No target leakage through scp_codes
-    # ------------------------------------------
-
-    leakage_validation = (
-        "scp_codes"
-        not in train_fused.columns
+    target_validation = (
+        np.isin(
+            train_target,
+            [0, 1]
+        ).all()
         and
-        "scp_codes"
-        not in validation_fused.columns
+        np.isin(
+            validation_target,
+            [0, 1]
+        ).all()
         and
-        "scp_codes"
-        not in test_fused.columns
+        np.isin(
+            test_target,
+            [0, 1]
+        ).all()
     )
 
-    # ------------------------------------------
-    # Row order / record preservation
-    # ------------------------------------------
+    id_validation = (
+        np.array_equal(
+            np.sort(train_ids),
+            np.sort(
+                train_df["ecg_id"].to_numpy()
+            )
+        )
+        and
+        np.array_equal(
+            np.sort(validation_ids),
+            np.sort(
+                validation_df["ecg_id"].to_numpy()
+            )
+        )
+        and
+        np.array_equal(
+            np.sort(test_ids),
+            np.sort(
+                test_df["ecg_id"].to_numpy()
+            )
+        )
+    )
 
-    record_validation = (
-        set(train_fused["ecg_id"])
-        == set(train_df["ecg_id"])
+    feature_name_validation = (
+        len(ecg_feature_names) == 84
         and
-        set(validation_fused["ecg_id"])
-        == set(validation_df["ecg_id"])
-        and
-        set(test_fused["ecg_id"])
-        == set(test_df["ecg_id"])
+        len(metadata_feature_names) == 88
     )
 
     # ==========================================
-    # 14. Final validation
+    # 13. Final validation
     # ==========================================
 
     overall_validation = (
         shape_validation
         and
-        ecg_feature_validation
+        feature_count_validation
         and
-        bmi_validation
-        and
-        target_validation
-        and
-        ecg_id_validation
+        row_count_validation
         and
         finite_validation
         and
-        leakage_validation
+        target_validation
         and
-        record_validation
+        id_validation
+        and
+        feature_name_validation
     )
 
     # ==========================================
-    # 15. Display validation
+    # 14. Validation report
     # ==========================================
 
     print("\n")
@@ -454,13 +437,18 @@ if __name__ == "__main__":
     )
 
     print(
-        f"ECG feature validation  : "
-        f"{'PASS' if ecg_feature_validation else 'FAIL'}"
+        f"Feature count validation: "
+        f"{'PASS' if feature_count_validation else 'FAIL'}"
     )
 
     print(
-        f"BMI validation          : "
-        f"{'PASS' if bmi_validation else 'FAIL'}"
+        f"Row count validation    : "
+        f"{'PASS' if row_count_validation else 'FAIL'}"
+    )
+
+    print(
+        f"NaN / Inf validation    : "
+        f"{'PASS' if finite_validation else 'FAIL'}"
     )
 
     print(
@@ -470,22 +458,12 @@ if __name__ == "__main__":
 
     print(
         f"ECG ID validation       : "
-        f"{'PASS' if ecg_id_validation else 'FAIL'}"
+        f"{'PASS' if id_validation else 'FAIL'}"
     )
 
     print(
-        f"NaN / Inf validation    : "
-        f"{'PASS' if finite_validation else 'FAIL'}"
-    )
-
-    print(
-        f"Leakage validation      : "
-        f"{'PASS' if leakage_validation else 'FAIL'}"
-    )
-
-    print(
-        f"Record preservation     : "
-        f"{'PASS' if record_validation else 'FAIL'}"
+        f"Feature name validation : "
+        f"{'PASS' if feature_name_validation else 'FAIL'}"
     )
 
     print(

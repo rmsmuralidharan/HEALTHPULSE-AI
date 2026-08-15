@@ -1,9 +1,11 @@
 import sys
 
 import numpy as np
-import pandas as pd
 
-from HealthPulse_AI_project.exception.exception import HealthPulseException
+from HealthPulse_AI_project.exception.exception import (
+    HealthPulseException
+)
+
 from HealthPulse_AI_project.logging.logger import logging
 
 
@@ -13,359 +15,252 @@ class FeatureFusion:
         pass
 
     # ==========================================
-    # 1. Validate ECG features
+    # 1. Validate feature array
     # ==========================================
 
-    def _validate_ecg_features(
+    def _validate_feature_array(
         self,
-        ecg_features,
-        name: str
+        features,
+        expected_features,
+        name
     ):
 
-        if ecg_features is None:
+        if features is None:
 
             raise ValueError(
-                f"{name} ECG features are None"
+                f"{name} features are None"
             )
 
         if not isinstance(
-            ecg_features,
+            features,
             np.ndarray
         ):
 
             raise ValueError(
-                f"{name} ECG features must "
-                "be a NumPy array"
+                f"{name} features must be "
+                "a NumPy array"
             )
 
-        if ecg_features.ndim != 2:
+        if features.ndim != 2:
 
             raise ValueError(
-                f"{name} ECG features must "
-                "be 2-dimensional"
+                f"{name} features must be "
+                "2-dimensional"
             )
 
-        if ecg_features.shape[1] != 84:
+        if features.shape[1] != expected_features:
 
             raise ValueError(
-                f"{name} must contain "
-                f"84 ECG features. "
-                f"Got {ecg_features.shape[1]}"
+                f"{name} expected "
+                f"{expected_features} features, "
+                f"got {features.shape[1]}"
             )
 
         if not np.isfinite(
-            ecg_features
+            features
         ).all():
 
             raise ValueError(
-                f"{name} ECG features contain "
+                f"{name} contains "
                 "NaN or infinite values"
             )
 
     # ==========================================
-    # 2. Validate metadata
+    # 2. Validate target
     # ==========================================
 
-    def _validate_metadata(
+    def _validate_target(
         self,
-        metadata_df: pd.DataFrame,
-        name: str
+        target,
+        expected_records,
+        name
     ):
 
-        if metadata_df is None:
+        if target is None:
 
             raise ValueError(
-                f"{name} metadata is None"
+                f"{name} target is None"
             )
 
-        if metadata_df.empty:
+        target = np.asarray(
+            target
+        ).reshape(-1)
+
+        if len(target) != expected_records:
 
             raise ValueError(
-                f"{name} metadata is empty"
+                f"{name} target count "
+                f"does not match feature count"
             )
 
-        required_columns = [
-            "ecg_id",
-            "Target"
-        ]
-
-        missing_columns = [
-            column
-            for column in required_columns
-            if column not in metadata_df.columns
-        ]
-
-        if missing_columns:
-
-            raise ValueError(
-                f"{name} metadata is missing "
-                f"columns: {missing_columns}"
-            )
-
-        if metadata_df["ecg_id"].duplicated().any():
-
-            raise ValueError(
-                f"{name} metadata contains "
-                "duplicate ecg_id values"
-            )
-
-        if not metadata_df["Target"].isin(
+        if not np.isin(
+            target,
             [0, 1]
         ).all():
 
             raise ValueError(
-                f"{name} metadata contains "
-                "invalid Target values"
+                f"{name} target contains "
+                "values other than 0 and 1"
             )
 
+        return target
+
     # ==========================================
-    # 3. Validate original split
+    # 3. Validate ECG IDs
     # ==========================================
 
-    def _validate_original_split(
+    def _validate_ecg_ids(
         self,
-        split_df: pd.DataFrame,
-        name: str
+        ecg_ids,
+        expected_records,
+        name
     ):
 
-        if split_df is None:
+        if ecg_ids is None:
 
             raise ValueError(
-                f"{name} split dataframe is None"
+                f"{name} ECG IDs are None"
             )
 
-        if split_df.empty:
+        ecg_ids = np.asarray(
+            ecg_ids
+        ).reshape(-1)
+
+        if len(ecg_ids) != expected_records:
 
             raise ValueError(
-                f"{name} split dataframe is empty"
+                f"{name} ECG ID count "
+                "does not match feature count"
             )
 
-        required_columns = [
-            "ecg_id",
-            "Target"
-        ]
-
-        for column in required_columns:
-
-            if column not in split_df.columns:
-
-                raise ValueError(
-                    f"{name} split is missing "
-                    f"column: {column}"
-                )
-
-        if split_df["ecg_id"].duplicated().any():
+        if len(np.unique(ecg_ids)) != len(ecg_ids):
 
             raise ValueError(
-                f"{name} split contains "
-                "duplicate ecg_id values"
+                f"{name} contains duplicate "
+                "ECG IDs"
             )
 
-    # ==========================================
-    # 4. Validate ECG alignment
-    # ==========================================
-
-    def _validate_ecg_alignment(
-        self,
-        ecg_features,
-        split_df: pd.DataFrame,
-        name: str
-    ):
-
-        if len(ecg_features) != len(split_df):
-
-            raise ValueError(
-                f"{name} ECG feature count "
-                f"({len(ecg_features)}) does not "
-                f"match split records "
-                f"({len(split_df)})"
-            )
+        return ecg_ids
 
     # ==========================================
-    # 5. Create ECG feature DataFrame
-    # ==========================================
-
-    def _create_ecg_dataframe(
-        self,
-        ecg_features,
-        feature_names,
-        split_df
-    ):
-
-        if len(feature_names) != 84:
-
-            raise ValueError(
-                "ECG feature name count must "
-                "be 84"
-            )
-
-        ecg_feature_df = pd.DataFrame(
-            ecg_features,
-            columns=feature_names
-        )
-
-        # Use the original record order to
-        # attach the ECG identifier.
-
-        ecg_feature_df.insert(
-            0,
-            "ecg_id",
-            split_df["ecg_id"].values
-        )
-
-        return ecg_feature_df
-
-    # ==========================================
-    # 6. Fuse one split
+    # 4. Fuse one split
     # ==========================================
 
     def _fuse_split(
         self,
         ecg_features,
-        metadata_df,
-        split_df,
-        feature_names,
-        name: str
+        metadata_features,
+        target,
+        ecg_ids,
+        name
     ):
 
         # ------------------------------------------
-        # Validate
+        # Validate ECG
         # ------------------------------------------
 
-        self._validate_ecg_features(
+        self._validate_feature_array(
             ecg_features,
-            name
-        )
-
-        self._validate_metadata(
-            metadata_df,
-            name
-        )
-
-        self._validate_original_split(
-            split_df,
-            name
-        )
-
-        self._validate_ecg_alignment(
-            ecg_features,
-            split_df,
-            name
+            84,
+            f"{name} ECG"
         )
 
         # ------------------------------------------
-        # Create ECG feature DataFrame
+        # Validate metadata
         # ------------------------------------------
 
-        ecg_feature_df = (
-            self._create_ecg_dataframe(
-                ecg_features,
-                feature_names,
-                split_df
-            )
-        )
-
-        # ------------------------------------------
-        # Keep only metadata features
-        #
-        # Target is kept separately.
-        # ecg_id is used only for alignment.
-        # ------------------------------------------
-
-        metadata_features = metadata_df.drop(
-            columns=["Target"],
-            errors="ignore"
-        ).copy()
-
-        # ------------------------------------------
-        # Merge using ecg_id
-        # ------------------------------------------
-
-        fused_df = pd.merge(
-            ecg_feature_df,
+        self._validate_feature_array(
             metadata_features,
-            on="ecg_id",
-            how="inner",
-            validate="one_to_one"
+            88,
+            f"{name} Metadata"
         )
 
         # ------------------------------------------
-        # Add target from original split
+        # Validate row count
         # ------------------------------------------
 
-        target_df = split_df[
-            ["ecg_id", "Target"]
-        ].copy()
-
-        fused_df = pd.merge(
-            fused_df,
-            target_df,
-            on="ecg_id",
-            how="inner",
-            validate="one_to_one"
-        )
-
-        # ------------------------------------------
-        # Validate record count
-        # ------------------------------------------
-
-        if len(fused_df) != len(split_df):
+        if (
+            ecg_features.shape[0]
+            != metadata_features.shape[0]
+        ):
 
             raise ValueError(
-                f"{name} fusion caused record loss. "
-                f"Expected {len(split_df)}, "
-                f"got {len(fused_df)}"
+                f"{name} ECG and metadata "
+                "record counts do not match"
             )
+
+        record_count = (
+            ecg_features.shape[0]
+        )
 
         # ------------------------------------------
         # Validate target
         # ------------------------------------------
 
-        if not fused_df["Target"].isin(
-            [0, 1]
-        ).all():
+        target = self._validate_target(
+            target,
+            record_count,
+            name
+        )
+
+        # ------------------------------------------
+        # Validate ECG IDs
+        # ------------------------------------------
+
+        ecg_ids = self._validate_ecg_ids(
+            ecg_ids,
+            record_count,
+            name
+        )
+
+        # ------------------------------------------
+        # Concatenate ECG + metadata
+        # ------------------------------------------
+
+        fused_features = np.concatenate(
+            [
+                ecg_features,
+                metadata_features
+            ],
+            axis=1
+        ).astype(
+            np.float32
+        )
+
+        # ------------------------------------------
+        # Final validation
+        # ------------------------------------------
+
+        if fused_features.shape[1] != 172:
 
             raise ValueError(
-                f"{name} contains invalid "
-                "target values after fusion"
+                f"{name} expected 172 fused "
+                f"features, got "
+                f"{fused_features.shape[1]}"
             )
-
-        # ------------------------------------------
-        # Validate NaN / Inf
-        # ------------------------------------------
-
-        numeric_columns = (
-            fused_df
-            .select_dtypes(
-                include=[np.number]
-            )
-            .columns
-        )
 
         if not np.isfinite(
-            fused_df[numeric_columns]
-            .to_numpy()
+            fused_features
         ).all():
 
             raise ValueError(
-                f"{name} fused features contain "
-                "NaN or infinite values"
+                f"{name} fused features "
+                "contain NaN or Inf"
             )
 
-        # ------------------------------------------
-        # Sort by ecg_id for deterministic output
-        # ------------------------------------------
-
-        fused_df = fused_df.sort_values(
-            "ecg_id"
-        ).reset_index(
-            drop=True
+        logging.info(
+            f"{name} fused shape: "
+            f"{fused_features.shape}"
         )
 
-        return fused_df
+        return (
+            fused_features,
+            target,
+            ecg_ids
+        )
 
     # ==========================================
-    # 7. Main method
+    # 5. Main fusion method
     # ==========================================
 
     def initiate_feature_fusion(
@@ -373,13 +268,15 @@ class FeatureFusion:
         train_ecg_features,
         validation_ecg_features,
         test_ecg_features,
-        ecg_feature_names,
-        train_metadata_df,
-        validation_metadata_df,
-        test_metadata_df,
-        train_df,
-        validation_df,
-        test_df
+        train_metadata_features,
+        validation_metadata_features,
+        test_metadata_features,
+        y_train,
+        y_validation,
+        y_test,
+        train_ecg_ids,
+        validation_ecg_ids,
+        test_ecg_ids
     ):
 
         try:
@@ -389,76 +286,77 @@ class FeatureFusion:
             )
 
             # ==========================================
-            # Fuse TRAIN
+            # TRAIN
             # ==========================================
 
-            train_fused = self._fuse_split(
+            (
+                train_fused,
+                train_target,
+                train_ids
+            ) = self._fuse_split(
                 train_ecg_features,
-                train_metadata_df,
-                train_df,
-                ecg_feature_names,
+                train_metadata_features,
+                y_train,
+                train_ecg_ids,
                 "Train"
             )
 
             # ==========================================
-            # Fuse VALIDATION
+            # VALIDATION
             # ==========================================
 
-            validation_fused = self._fuse_split(
+            (
+                validation_fused,
+                validation_target,
+                validation_ids
+            ) = self._fuse_split(
                 validation_ecg_features,
-                validation_metadata_df,
-                validation_df,
-                ecg_feature_names,
+                validation_metadata_features,
+                y_validation,
+                validation_ecg_ids,
                 "Validation"
             )
 
             # ==========================================
-            # Fuse TEST
+            # TEST
             # ==========================================
 
-            test_fused = self._fuse_split(
+            (
+                test_fused,
+                test_target,
+                test_ids
+            ) = self._fuse_split(
                 test_ecg_features,
-                test_metadata_df,
-                test_df,
-                ecg_feature_names,
+                test_metadata_features,
+                y_test,
+                test_ecg_ids,
                 "Test"
             )
 
             # ==========================================
-            # Logging
+            # Final logging
             # ==========================================
 
             logging.info(
-                f"Train fused shape: "
-                f"{train_fused.shape}"
-            )
-
-            logging.info(
-                f"Validation fused shape: "
-                f"{validation_fused.shape}"
-            )
-
-            logging.info(
-                f"Test fused shape: "
-                f"{test_fused.shape}"
-            )
-
-            logging.info(
-                "Feature fusion completed "
-                "successfully"
+                "Feature fusion completed successfully"
             )
 
             return (
                 train_fused,
                 validation_fused,
-                test_fused
+                test_fused,
+                train_target,
+                validation_target,
+                test_target,
+                train_ids,
+                validation_ids,
+                test_ids
             )
 
         except Exception as e:
 
             logging.exception(
-                "Error occurred during "
-                "feature fusion"
+                "Error occurred during feature fusion"
             )
 
             raise HealthPulseException(
