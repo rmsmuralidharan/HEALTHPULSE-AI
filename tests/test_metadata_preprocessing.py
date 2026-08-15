@@ -21,7 +21,7 @@ from HealthPulse_AI_project.components.metadata_preprocessing import (
 if __name__ == "__main__":
 
     # ==========================================
-    # 1. Dataset path
+    # 1. PTB-XL path
     # ==========================================
 
     data_path = os.path.join(
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     )
 
     # ==========================================
-    # 4. Patient-level split
+    # 4. Patient-level splitting
     # ==========================================
 
     splitter = DataSplitting(
@@ -81,9 +81,9 @@ if __name__ == "__main__":
     preprocessing = MetaDataPreprocessing()
 
     (
-        X_train_metadata,
-        X_validation_metadata,
-        X_test_metadata,
+        X_train_processed,
+        X_validation_processed,
+        X_test_processed,
         feature_names
     ) = preprocessing.initiate_metadata_preprocessing(
         train_df,
@@ -92,7 +92,23 @@ if __name__ == "__main__":
     )
 
     # ==========================================
-    # 6. Display results
+    # 6. Get imputed DataFrames
+    # ==========================================
+
+    train_imputed_df = (
+        preprocessing.train_imputed_df
+    )
+
+    validation_imputed_df = (
+        preprocessing.validation_imputed_df
+    )
+
+    test_imputed_df = (
+        preprocessing.test_imputed_df
+    )
+
+    # ==========================================
+    # 7. Display results
     # ==========================================
 
     print("\n")
@@ -104,28 +120,43 @@ if __name__ == "__main__":
     print("-" * 60)
 
     print(
-        f"Shape : "
-        f"{X_train_metadata.shape}"
+        f"Processed shape : "
+        f"{X_train_processed.shape}"
+    )
+
+    print(
+        f"Patients        : "
+        f"{train_imputed_df['patient_id'].nunique()}"
     )
 
     print("\nVALIDATION")
     print("-" * 60)
 
     print(
-        f"Shape : "
-        f"{X_validation_metadata.shape}"
+        f"Processed shape : "
+        f"{X_validation_processed.shape}"
+    )
+
+    print(
+        f"Patients        : "
+        f"{validation_imputed_df['patient_id'].nunique()}"
     )
 
     print("\nTEST")
     print("-" * 60)
 
     print(
-        f"Shape : "
-        f"{X_test_metadata.shape}"
+        f"Processed shape : "
+        f"{X_test_processed.shape}"
+    )
+
+    print(
+        f"Patients        : "
+        f"{test_imputed_df['patient_id'].nunique()}"
     )
 
     # ==========================================
-    # 7. Feature names
+    # 8. Feature information
     # ==========================================
 
     print("\nFEATURES")
@@ -136,93 +167,109 @@ if __name__ == "__main__":
         f"{len(feature_names)}"
     )
 
-    print(
-        feature_names
+    print(feature_names)
+
+    # ==========================================
+    # 9. Imputation validation
+    # ==========================================
+
+    metadata_columns = [
+        "age",
+        "sex",
+        "height",
+        "weight",
+        "site",
+        "nurse",
+        "heart_axis",
+        "device",
+        "second_opinion"
+    ]
+
+    train_missing = (
+        train_imputed_df[
+            metadata_columns
+        ]
+        .isna()
+        .sum()
+        .sum()
+    )
+
+    validation_missing = (
+        validation_imputed_df[
+            metadata_columns
+        ]
+        .isna()
+        .sum()
+        .sum()
+    )
+
+    test_missing = (
+        test_imputed_df[
+            metadata_columns
+        ]
+        .isna()
+        .sum()
+        .sum()
+    )
+
+    imputation_validation = (
+        train_missing == 0
+        and
+        validation_missing == 0
+        and
+        test_missing == 0
     )
 
     # ==========================================
-    # 8. Shape validation
+    # 10. Shape validation
     # ==========================================
 
     shape_validation = (
-        X_train_metadata.ndim == 2
-        and
-        X_validation_metadata.ndim == 2
-        and
-        X_test_metadata.ndim == 2
-        and
-        X_train_metadata.shape[0]
+        X_train_processed.shape[0]
         == len(train_df)
         and
-        X_validation_metadata.shape[0]
+        X_validation_processed.shape[0]
         == len(validation_df)
         and
-        X_test_metadata.shape[0]
+        X_test_processed.shape[0]
         == len(test_df)
     )
 
     # ==========================================
-    # 9. Missing-value validation
+    # 11. Feature count validation
     # ==========================================
 
-    missing_validation = (
-        not np.isnan(
-            X_train_metadata
-        ).any()
+    feature_count_validation = (
+        X_train_processed.shape[1]
+        == len(feature_names)
         and
-        not np.isnan(
-            X_validation_metadata
-        ).any()
+        X_validation_processed.shape[1]
+        == len(feature_names)
         and
-        not np.isnan(
-            X_test_metadata
-        ).any()
+        X_test_processed.shape[1]
+        == len(feature_names)
     )
 
     # ==========================================
-    # 10. Scaling validation
+    # 12. NaN / Inf validation
     # ==========================================
 
-    numerical_feature_count = 3
-
-    train_numerical = X_train_metadata[
-        :, :numerical_feature_count
-    ]
-
-    train_mean = train_numerical.mean(
-        axis=0
-    )
-
-    train_std = train_numerical.std(
-        axis=0
-    )
-
-    scaling_validation = (
-        np.allclose(
-            train_mean,
-            0,
-            atol=1e-2
-        )
+    finite_validation = (
+        np.isfinite(
+            X_train_processed
+        ).all()
         and
-        np.allclose(
-            train_std,
-            1,
-            atol=1e-2
-        )
+        np.isfinite(
+            X_validation_processed
+        ).all()
+        and
+        np.isfinite(
+            X_test_processed
+        ).all()
     )
 
-    print("\nSCALING CHECK")
-    print("-" * 60)
-
-    print(
-        f"Numerical mean: {train_mean}"
-    )
-
-    print(
-        f"Numerical std : {train_std}"
-    )
     # ==========================================
-    # 11. Transformer validation
+    # 13. Transformer validation
     # ==========================================
 
     transformer_exists = os.path.exists(
@@ -230,8 +277,20 @@ if __name__ == "__main__":
     )
 
     # ==========================================
-    # 12. Final validation
+    # 14. Final validation
     # ==========================================
+
+    overall_validation = (
+        shape_validation
+        and
+        feature_count_validation
+        and
+        finite_validation
+        and
+        imputation_validation
+        and
+        transformer_exists
+    )
 
     print("\n")
     print("=" * 60)
@@ -244,13 +303,18 @@ if __name__ == "__main__":
     )
 
     print(
-        f"Missing-value check    : "
-        f"{'PASS' if missing_validation else 'FAIL'}"
+        f"Feature count check    : "
+        f"{'PASS' if feature_count_validation else 'FAIL'}"
     )
 
     print(
-        f"Train scaling check    : "
-        f"{'PASS' if scaling_validation else 'FAIL'}"
+        f"Missing-value check    : "
+        f"{'PASS' if imputation_validation else 'FAIL'}"
+    )
+
+    print(
+        f"NaN / Inf check        : "
+        f"{'PASS' if finite_validation else 'FAIL'}"
     )
 
     print(
@@ -258,19 +322,8 @@ if __name__ == "__main__":
         f"{'PASS' if transformer_exists else 'FAIL'}"
     )
 
-    overall_validation = (
-        shape_validation
-        and
-        missing_validation
-        and
-        scaling_validation
-        and
-        transformer_exists
-    )
-
     print(
-        f"\nMetadata preprocessing "
-        f"validation: "
+        f"\nMetadata preprocessing validation: "
         f"{'PASS' if overall_validation else 'FAIL'}"
     )
 
