@@ -7,10 +7,11 @@ def error_message_detail(error, error_detail: sys):
 
     line_number = exc_tb.tb_lineno
 
-    error_message = "Error occurred in python script: [{0}] at line number: [{1}] error message: [{2}]".format(
-        file_name, line_number.__str__(sum)
+    error_message = (
+        f"Error occurred in python script: [{file_name}] "
+        f"at line number: [{line_number}] "
+        f"error message: [{str(error)}]"
     )
-
     return error_message
 
 
