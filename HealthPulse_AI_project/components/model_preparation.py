@@ -1,7 +1,6 @@
 import sys
 
 import numpy as np
-import pandas as pd
 
 from HealthPulse_AI_project.exception.exception import (
     HealthPulseException
@@ -16,40 +15,49 @@ class ModelPreparation:
         pass
 
     # ==========================================
-    # Validate input dataframe
+    # Validate feature array
     # ==========================================
 
-    def _validate_dataframe(
+    def _validate_features(
         self,
-        df: pd.DataFrame,
-        name: str
+        X,
+        name
     ):
 
-        if df is None:
+        if X is None:
+
             raise ValueError(
-                f"{name} dataframe is None"
+                f"{name} features are None"
             )
 
-        if df.empty:
+        if not isinstance(
+            X,
+            np.ndarray
+        ):
+
             raise ValueError(
-                f"{name} dataframe is empty"
+                f"{name} features must be "
+                "a NumPy array"
             )
 
-        required_columns = [
-            "ecg_id",
-            "Target"
-        ]
+        if X.ndim != 2:
 
-        missing_columns = [
-            column
-            for column in required_columns
-            if column not in df.columns
-        ]
-
-        if missing_columns:
             raise ValueError(
-                f"{name} missing columns: "
-                f"{missing_columns}"
+                f"{name} features must be "
+                "2-dimensional"
+            )
+
+        if X.shape[1] != 172:
+
+            raise ValueError(
+                f"{name} expected 172 features, "
+                f"got {X.shape[1]}"
+            )
+
+        if not np.isfinite(X).all():
+
+            raise ValueError(
+                f"{name} contains NaN or Inf"
             )
 
     # ==========================================
@@ -59,10 +67,28 @@ class ModelPreparation:
     def _validate_target(
         self,
         y,
-        name: str
+        expected_records,
+        name
     ):
 
-        y = np.asarray(y).reshape(-1)
+        if y is None:
+
+            raise ValueError(
+                f"{name} target is None"
+            )
+
+        y = np.asarray(
+            y
+        ).reshape(-1)
+
+        if len(y) != expected_records:
+
+            raise ValueError(
+                f"{name} target count "
+                f"({len(y)}) does not match "
+                f"feature count "
+                f"({expected_records})"
+            )
 
         if not np.isin(
             y,
@@ -71,17 +97,18 @@ class ModelPreparation:
 
             raise ValueError(
                 f"{name} target contains "
-                "invalid values"
+                "values other than 0 and 1"
             )
 
         if len(np.unique(y)) < 2:
 
             raise ValueError(
-                f"{name} target contains "
-                "only one class"
+                f"{name} contains only one class"
             )
 
-        return y.astype(np.int32)
+        return y.astype(
+            np.int32
+        )
 
     # ==========================================
     # Prepare one split
@@ -89,75 +116,41 @@ class ModelPreparation:
 
     def _prepare_split(
         self,
-        df: pd.DataFrame,
-        name: str
+        X,
+        y,
+        name
     ):
 
-        self._validate_dataframe(
-            df,
+        # --------------------------------------
+        # Validate features
+        # --------------------------------------
+
+        self._validate_features(
+            X,
             name
         )
 
-        # ------------------------------------------
-        # Separate target
-        # ------------------------------------------
-
-        y = df["Target"].to_numpy()
-
-        # ------------------------------------------
-        # Remove identifier and target
-        # ------------------------------------------
-
-        X = df.drop(
-            columns=[
-                "ecg_id",
-                "Target"
-            ]
-        ).copy()
-
-        # ------------------------------------------
-        # Validate feature count
-        # ------------------------------------------
-
-        if X.shape[1] != 172:
-
-            raise ValueError(
-                f"{name} expected 172 features "
-                f"after removing ecg_id and Target, "
-                f"got {X.shape[1]}"
-            )
-
-        # ------------------------------------------
-        # Convert features to float32
-        # ------------------------------------------
-
-        X = X.to_numpy(
-            dtype=np.float32
-        )
-
-        # ------------------------------------------
-        # Validate NaN / Inf
-        # ------------------------------------------
-
-        if not np.isfinite(X).all():
-
-            raise ValueError(
-                f"{name} features contain "
-                "NaN or infinite values"
-            )
-
-        # ------------------------------------------
+        # --------------------------------------
         # Validate target
-        # ------------------------------------------
+        # --------------------------------------
 
         y = self._validate_target(
             y,
+            X.shape[0],
             name
         )
 
-        # ------------------------------------------
-        # Validate row alignment
-        # ------------------------------------------
+        # --------------------------------------
+        # Convert features to float32
+        # --------------------------------------
+
+        X = X.astype(
+            np.float32
+        )
+
+        # --------------------------------------
+        # Final alignment check
+        # --------------------------------------
 
         if X.shape[0] != len(y):
 
@@ -183,7 +176,7 @@ class ModelPreparation:
     def _log_class_distribution(
         self,
         y,
-        name: str
+        name
     ):
 
         class_counts = np.bincount(
@@ -223,9 +216,12 @@ class ModelPreparation:
 
     def initiate_model_preparation(
         self,
-        train_df: pd.DataFrame,
-        validation_df: pd.DataFrame,
-        test_df: pd.DataFrame
+        train_features,
+        train_target,
+        validation_features,
+        validation_target,
+        test_features,
+        test_target
     ):
 
         try:
@@ -234,45 +230,48 @@ class ModelPreparation:
                 "Starting model preparation"
             )
 
-            # ==========================================
+            # ==================================
             # TRAIN
-            # ==========================================
+            # ==================================
 
             (
                 X_train,
                 y_train
             ) = self._prepare_split(
-                train_df,
+                train_features,
+                train_target,
                 "Train"
             )
 
-            # ==========================================
+            # ==================================
             # VALIDATION
-            # ==========================================
+            # ==================================
 
             (
                 X_validation,
                 y_validation
             ) = self._prepare_split(
-                validation_df,
+                validation_features,
+                validation_target,
                 "Validation"
             )
 
-            # ==========================================
+            # ==================================
             # TEST
-            # ==========================================
+            # ==================================
 
             (
                 X_test,
                 y_test
             ) = self._prepare_split(
-                test_df,
+                test_features,
+                test_target,
                 "Test"
             )
 
-            # ==========================================
-            # Log distributions
-            # ==========================================
+            # ==================================
+            # Class distribution
+            # ==================================
 
             self._log_class_distribution(
                 y_train,
@@ -289,20 +288,28 @@ class ModelPreparation:
                 "Test"
             )
 
-            # ==========================================
-            # Final validation
-            # ==========================================
+            # ==================================
+            # Feature consistency
+            # ==================================
 
-            if X_train.shape[1] != X_validation.shape[1]:
+            if (
+                X_train.shape[1]
+                != X_validation.shape[1]
+            ):
+
                 raise ValueError(
-                    "Train and validation feature "
-                    "counts do not match"
+                    "Train and validation "
+                    "feature counts do not match"
                 )
 
-            if X_train.shape[1] != X_test.shape[1]:
+            if (
+                X_train.shape[1]
+                != X_test.shape[1]
+            ):
+
                 raise ValueError(
-                    "Train and test feature "
-                    "counts do not match"
+                    "Train and test "
+                    "feature counts do not match"
                 )
 
             logging.info(
