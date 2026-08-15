@@ -1,6 +1,8 @@
 import os
 import sys
+
 import joblib
+import numpy as np
 import pandas as pd
 
 from sklearn.compose import ColumnTransformer
@@ -8,7 +10,10 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from HealthPulse_AI_project.exception.exception import HealthPulseException
+from HealthPulse_AI_project.exception.exception import (
+    HealthPulseException
+)
+
 from HealthPulse_AI_project.logging.logger import logging
 
 
@@ -31,11 +36,120 @@ class MetaDataPreprocessing:
             "metadata_preprocessor.pkl"
         )
 
-        # These will contain the imputed
-        # DataFrames after preprocessing.
+        # Preserve imputed + BMI DataFrames
+        # for downstream components if required.
+
         self.train_imputed_df = None
         self.validation_imputed_df = None
         self.test_imputed_df = None
+
+    # ==========================================
+    # Create BMI
+    # ==========================================
+
+    def _create_bmi(
+        self,
+        df: pd.DataFrame,
+        name: str
+    ):
+
+        result_df = df.copy()
+
+        if "height" not in result_df.columns:
+            raise ValueError(
+                f"{name}: height column is missing"
+            )
+
+        if "weight" not in result_df.columns:
+            raise ValueError(
+                f"{name}: weight column is missing"
+            )
+
+        # Height is stored in centimeters.
+
+        height_m = (
+            result_df["height"] / 100.0
+        )
+
+        # BMI = weight / height²
+
+        result_df["BMI"] = (
+            result_df["weight"]
+            / np.square(height_m)
+        )
+
+        # Handle invalid mathematical values.
+
+        result_df["BMI"] = (
+            result_df["BMI"]
+            .replace(
+                [np.inf, -np.inf],
+                np.nan
+            )
+        )
+
+        if result_df["BMI"].isna().any():
+
+            raise ValueError(
+                f"{name}: BMI contains missing "
+                "values after calculation"
+            )
+
+        if not np.isfinite(
+            result_df["BMI"]
+        ).all():
+
+            raise ValueError(
+                f"{name}: BMI contains "
+                "infinite values"
+            )
+
+        return result_df
+
+    # ==========================================
+    # Validate dataframe
+    # ==========================================
+
+    def _validate_dataframe(
+        self,
+        df: pd.DataFrame,
+        name: str
+    ):
+
+        if df is None or df.empty:
+
+            raise ValueError(
+                f"{name} dataframe is empty"
+            )
+
+        required_columns = [
+            "age",
+            "sex",
+            "height",
+            "weight",
+            "site",
+            "nurse",
+            "heart_axis",
+            "device",
+            "second_opinion"
+        ]
+
+        missing_columns = [
+            column
+            for column in required_columns
+            if column not in df.columns
+        ]
+
+        if missing_columns:
+
+            raise ValueError(
+                f"{name} dataframe is missing "
+                f"columns: {missing_columns}"
+            )
+
+    # ==========================================
+    # Main preprocessing
+    # ==========================================
 
     def initiate_metadata_preprocessing(
         self,
@@ -54,60 +168,23 @@ class MetaDataPreprocessing:
             # 1. Validate input
             # ==========================================
 
-            if train_df.empty:
+            self._validate_dataframe(
+                train_df,
+                "Train"
+            )
 
-                raise ValueError(
-                    "training dataframe is empty"
-                )
+            self._validate_dataframe(
+                validation_df,
+                "Validation"
+            )
 
-            if validation_df.empty:
-
-                raise ValueError(
-                    "validation data frame is empty"
-                )
-
-            if test_df.empty:
-
-                raise ValueError(
-                    "test dataframe is empty"
-                )
-
-            required_columns = [
-                "age",
-                "sex",
-                "height",
-                "weight",
-                "site",
-                "nurse",
-                "heart_axis",
-                "device",
-                "second_opinion"
-            ]
-
-            for column in required_columns:
-
-                if column not in train_df.columns:
-
-                    raise ValueError(
-                        f"Missing metadata column: {column}"
-                    )
-
-                if column not in validation_df.columns:
-
-                    raise ValueError(
-                        f"Missing metadata column "
-                        f"in validation data: {column}"
-                    )
-
-                if column not in test_df.columns:
-
-                    raise ValueError(
-                        f"Missing metadata column "
-                        f"in test data: {column}"
-                    )
+            self._validate_dataframe(
+                test_df,
+                "Test"
+            )
 
             # ==========================================
-            # 2. Select metadata features
+            # 2. Select metadata columns
             # ==========================================
 
             metadata_columns = [
@@ -141,7 +218,8 @@ class MetaDataPreprocessing:
             numerical_features = [
                 "age",
                 "height",
-                "weight"
+                "weight",
+                "BMI"
             ]
 
             categorical_features = [
@@ -157,7 +235,7 @@ class MetaDataPreprocessing:
             ]
 
             # ==========================================
-            # 4. Numerical preprocessing
+            # 4. Numerical pipeline
             # ==========================================
 
             numerical_pipeline = Pipeline(
@@ -176,7 +254,7 @@ class MetaDataPreprocessing:
             )
 
             # ==========================================
-            # 5. Categorical preprocessing
+            # 5. Categorical pipeline
             # ==========================================
 
             categorical_pipeline = Pipeline(
@@ -198,7 +276,7 @@ class MetaDataPreprocessing:
             )
 
             # ==========================================
-            # 6. Binary preprocessing
+            # 6. Binary pipeline
             # ==========================================
 
             binary_pipeline = Pipeline(
@@ -213,7 +291,122 @@ class MetaDataPreprocessing:
             )
 
             # ==========================================
-            # 7. Combined transformer
+            # 7. We need BMI BEFORE fitting transformer
+            #
+            # To ensure height/weight imputation
+            # comes from TRAIN only, calculate BMI
+            # after obtaining TRAIN-derived medians.
+            # ==========================================
+
+            # Fit temporary imputer ONLY on training
+            # height and weight.
+
+            height_weight_imputer = SimpleImputer(
+                strategy="median"
+            )
+
+            train_hw = height_weight_imputer.fit_transform(
+                x_train[
+                    ["height", "weight"]
+                ]
+            )
+
+            validation_hw = (
+                height_weight_imputer.transform(
+                    x_validation[
+                        ["height", "weight"]
+                    ]
+                )
+            )
+
+            test_hw = (
+                height_weight_imputer.transform(
+                    x_test[
+                        ["height", "weight"]
+                    ]
+                )
+            )
+
+            # Put imputed height/weight back.
+
+            x_train[
+                ["height", "weight"]
+            ] = train_hw
+
+            x_validation[
+                ["height", "weight"]
+            ] = validation_hw
+
+            x_test[
+                ["height", "weight"]
+            ] = test_hw
+
+            logging.info(
+                "Height/weight imputation fitted "
+                "using TRAIN data only"
+            )
+
+            # ==========================================
+            # 8. Create BMI
+            # ==========================================
+
+            x_train = self._create_bmi(
+                x_train,
+                "Train"
+            )
+
+            x_validation = self._create_bmi(
+                x_validation,
+                "Validation"
+            )
+
+            x_test = self._create_bmi(
+                x_test,
+                "Test"
+            )
+
+            # ==========================================
+            # 9. Save imputed + BMI DataFrames
+            # ==========================================
+
+            self.train_imputed_df = (
+                train_df.copy()
+            )
+
+            self.validation_imputed_df = (
+                validation_df.copy()
+            )
+
+            self.test_imputed_df = (
+                test_df.copy()
+            )
+
+            self.train_imputed_df[
+                ["height", "weight"]
+            ] = train_hw
+
+            self.validation_imputed_df[
+                ["height", "weight"]
+            ] = validation_hw
+
+            self.test_imputed_df[
+                ["height", "weight"]
+            ] = test_hw
+
+            self.train_imputed_df["BMI"] = (
+                x_train["BMI"].values
+            )
+
+            self.validation_imputed_df["BMI"] = (
+                x_validation["BMI"].values
+            )
+
+            self.test_imputed_df["BMI"] = (
+                x_test["BMI"].values
+            )
+
+            # ==========================================
+            # 10. Combined transformer
             # ==========================================
 
             preprocessor = ColumnTransformer(
@@ -237,11 +430,11 @@ class MetaDataPreprocessing:
             )
 
             # ==========================================
-            # 8. Fit ONLY on training data
+            # 11. FIT TRAIN ONLY
             # ==========================================
 
             logging.info(
-                "Fitting metadata transformations "
+                "Fitting metadata transformer "
                 "using TRAIN data only"
             )
 
@@ -252,7 +445,7 @@ class MetaDataPreprocessing:
             )
 
             # ==========================================
-            # 9. Transform validation/test
+            # 12. Transform validation
             # ==========================================
 
             x_validation_processed = (
@@ -261,6 +454,10 @@ class MetaDataPreprocessing:
                 )
             )
 
+            # ==========================================
+            # 13. Transform test
+            # ==========================================
+
             x_test_processed = (
                 preprocessor.transform(
                     x_test
@@ -268,175 +465,38 @@ class MetaDataPreprocessing:
             )
 
             # ==========================================
-            # 10. Extract TRAIN-fitted imputers
+            # 14. Validate processed arrays
             # ==========================================
 
-            numerical_fitted_pipeline = (
-                preprocessor
-                .named_transformers_["numerical"]
-            )
+            if not np.isfinite(
+                x_train_processed
+            ).all():
 
-            categorical_fitted_pipeline = (
-                preprocessor
-                .named_transformers_["categorical"]
-            )
-
-            binary_fitted_pipeline = (
-                preprocessor
-                .named_transformers_["binary"]
-            )
-
-            numerical_imputer = (
-                numerical_fitted_pipeline
-                .named_steps["imputer"]
-            )
-
-            categorical_imputer = (
-                categorical_fitted_pipeline
-                .named_steps["imputer"]
-            )
-
-            binary_imputer = (
-                binary_fitted_pipeline
-                .named_steps["imputer"]
-            )
-
-            # ==========================================
-            # 11. Create imputed DataFrames
-            #
-            # IMPORTANT:
-            # All imputers were fitted on TRAIN.
-            # Validation/Test are only transformed.
-            # ==========================================
-
-            train_imputed_df = train_df.copy()
-
-            validation_imputed_df = (
-                validation_df.copy()
-            )
-
-            test_imputed_df = test_df.copy()
-
-            # ------------------------------------------
-            # Numerical
-            # ------------------------------------------
-
-            train_imputed_df[
-                numerical_features
-            ] = numerical_imputer.transform(
-                train_df[numerical_features]
-            )
-
-            validation_imputed_df[
-                numerical_features
-            ] = numerical_imputer.transform(
-                validation_df[numerical_features]
-            )
-
-            test_imputed_df[
-                numerical_features
-            ] = numerical_imputer.transform(
-                test_df[numerical_features]
-            )
-
-            # ------------------------------------------
-            # Categorical
-            # ------------------------------------------
-
-            train_imputed_df[
-                categorical_features
-            ] = categorical_imputer.transform(
-                train_df[categorical_features]
-            )
-
-            validation_imputed_df[
-                categorical_features
-            ] = categorical_imputer.transform(
-                validation_df[categorical_features]
-            )
-
-            test_imputed_df[
-                categorical_features
-            ] = categorical_imputer.transform(
-                test_df[categorical_features]
-            )
-
-            # ------------------------------------------
-            # Binary
-            # ------------------------------------------
-
-            train_imputed_df[
-                binary_features
-            ] = binary_imputer.transform(
-                train_df[binary_features]
-            )
-
-            validation_imputed_df[
-                binary_features
-            ] = binary_imputer.transform(
-                validation_df[binary_features]
-            )
-
-            test_imputed_df[
-                binary_features
-            ] = binary_imputer.transform(
-                test_df[binary_features]
-            )
-
-            # ==========================================
-            # 12. Store imputed DataFrames
-            # ==========================================
-
-            self.train_imputed_df = (
-                train_imputed_df
-            )
-
-            self.validation_imputed_df = (
-                validation_imputed_df
-            )
-
-            self.test_imputed_df = (
-                test_imputed_df
-            )
-
-            logging.info(
-                "Imputed metadata DataFrames "
-                "created successfully"
-            )
-
-            # ==========================================
-            # 13. Validate imputation
-            # ==========================================
-
-            for name, df in [
-                ("Train", train_imputed_df),
-                ("Validation", validation_imputed_df),
-                ("Test", test_imputed_df)
-            ]:
-
-                missing_count = (
-                    df[metadata_columns]
-                    .isna()
-                    .sum()
-                    .sum()
+                raise ValueError(
+                    "Train metadata contains "
+                    "NaN or Inf"
                 )
 
-                logging.info(
-                    f"{name} metadata missing values "
-                    f"after imputation: "
-                    f"{missing_count}"
+            if not np.isfinite(
+                x_validation_processed
+            ).all():
+
+                raise ValueError(
+                    "Validation metadata contains "
+                    "NaN or Inf"
                 )
 
-                if missing_count > 0:
+            if not np.isfinite(
+                x_test_processed
+            ).all():
 
-                    raise ValueError(
-                        f"{name} still contains "
-                        "missing metadata values "
-                        "after imputation"
-                    )
+                raise ValueError(
+                    "Test metadata contains "
+                    "NaN or Inf"
+                )
 
             # ==========================================
-            # 14. Save fitted transformer
+            # 15. Save transformer
             # ==========================================
 
             joblib.dump(
@@ -445,12 +505,12 @@ class MetaDataPreprocessing:
             )
 
             logging.info(
-                f"metadata preprocessor saved to: "
+                f"Metadata preprocessor saved to: "
                 f"{self.transformer_path}"
             )
 
             # ==========================================
-            # 15. Get feature names
+            # 16. Feature names
             # ==========================================
 
             feature_names = (
@@ -463,33 +523,10 @@ class MetaDataPreprocessing:
                 f"{len(feature_names)}"
             )
 
-            # ==========================================
-            # 16. Logging
-            # ==========================================
-
-            logging.info(
-                f"Train metadata shape: "
-                f"{x_train_processed.shape}"
-            )
-
-            logging.info(
-                f"Validation metadata shape: "
-                f"{x_validation_processed.shape}"
-            )
-
-            logging.info(
-                f"Test metadata shape: "
-                f"{x_test_processed.shape}"
-            )
-
             logging.info(
                 "Metadata preprocessing completed "
                 "successfully"
             )
-
-            # ==========================================
-            # 17. Keep existing return structure
-            # ==========================================
 
             return (
                 x_train_processed,

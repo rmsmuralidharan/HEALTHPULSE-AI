@@ -81,9 +81,9 @@ if __name__ == "__main__":
     preprocessing = MetaDataPreprocessing()
 
     (
-        X_train_processed,
-        X_validation_processed,
-        X_test_processed,
+        X_train,
+        X_validation,
+        X_test,
         feature_names
     ) = preprocessing.initiate_metadata_preprocessing(
         train_df,
@@ -92,23 +92,7 @@ if __name__ == "__main__":
     )
 
     # ==========================================
-    # 6. Get imputed DataFrames
-    # ==========================================
-
-    train_imputed_df = (
-        preprocessing.train_imputed_df
-    )
-
-    validation_imputed_df = (
-        preprocessing.validation_imputed_df
-    )
-
-    test_imputed_df = (
-        preprocessing.test_imputed_df
-    )
-
-    # ==========================================
-    # 7. Display results
+    # 6. Results
     # ==========================================
 
     print("\n")
@@ -120,13 +104,12 @@ if __name__ == "__main__":
     print("-" * 60)
 
     print(
-        f"Processed shape : "
-        f"{X_train_processed.shape}"
+        f"Processed shape : {X_train.shape}"
     )
 
     print(
         f"Patients        : "
-        f"{train_imputed_df['patient_id'].nunique()}"
+        f"{train_df['patient_id'].nunique()}"
     )
 
     print("\nVALIDATION")
@@ -134,12 +117,12 @@ if __name__ == "__main__":
 
     print(
         f"Processed shape : "
-        f"{X_validation_processed.shape}"
+        f"{X_validation.shape}"
     )
 
     print(
         f"Patients        : "
-        f"{validation_imputed_df['patient_id'].nunique()}"
+        f"{validation_df['patient_id'].nunique()}"
     )
 
     print("\nTEST")
@@ -147,16 +130,16 @@ if __name__ == "__main__":
 
     print(
         f"Processed shape : "
-        f"{X_test_processed.shape}"
+        f"{X_test.shape}"
     )
 
     print(
         f"Patients        : "
-        f"{test_imputed_df['patient_id'].nunique()}"
+        f"{test_df['patient_id'].nunique()}"
     )
 
     # ==========================================
-    # 8. Feature information
+    # 7. Feature information
     # ==========================================
 
     print("\nFEATURES")
@@ -170,114 +153,122 @@ if __name__ == "__main__":
     print(feature_names)
 
     # ==========================================
-    # 9. Imputation validation
+    # 8. Check BMI in feature names
     # ==========================================
 
-    metadata_columns = [
-        "age",
-        "sex",
-        "height",
-        "weight",
-        "site",
-        "nurse",
-        "heart_axis",
-        "device",
-        "second_opinion"
+    bmi_features = [
+        feature
+        for feature in feature_names
+        if "BMI" in feature
     ]
 
-    train_missing = (
-        train_imputed_df[
-            metadata_columns
-        ]
-        .isna()
-        .sum()
-        .sum()
-    )
+    print("\nBMI FEATURES")
+    print("-" * 60)
 
-    validation_missing = (
-        validation_imputed_df[
-            metadata_columns
-        ]
-        .isna()
-        .sum()
-        .sum()
-    )
-
-    test_missing = (
-        test_imputed_df[
-            metadata_columns
-        ]
-        .isna()
-        .sum()
-        .sum()
-    )
-
-    imputation_validation = (
-        train_missing == 0
-        and
-        validation_missing == 0
-        and
-        test_missing == 0
-    )
+    print(bmi_features)
 
     # ==========================================
-    # 10. Shape validation
+    # 9. Validation checks
     # ==========================================
+
+    # ------------------------------------------
+    # Shape validation
+    # ------------------------------------------
 
     shape_validation = (
-        X_train_processed.shape[0]
-        == len(train_df)
+        X_train.shape[0] == len(train_df)
         and
-        X_validation_processed.shape[0]
+        X_validation.shape[0]
         == len(validation_df)
         and
-        X_test_processed.shape[0]
+        X_test.shape[0]
         == len(test_df)
     )
 
     # ==========================================
-    # 11. Feature count validation
+    # Feature count validation
     # ==========================================
 
     feature_count_validation = (
-        X_train_processed.shape[1]
+        X_train.shape[1]
         == len(feature_names)
         and
-        X_validation_processed.shape[1]
+        X_validation.shape[1]
         == len(feature_names)
         and
-        X_test_processed.shape[1]
+        X_test.shape[1]
         == len(feature_names)
     )
 
     # ==========================================
-    # 12. NaN / Inf validation
+    # BMI feature validation
+    # ==========================================
+
+    bmi_validation = (
+        len(bmi_features) == 1
+    )
+
+    # ==========================================
+    # Missing-value validation
+    # ==========================================
+
+    missing_value_validation = (
+        not np.isnan(X_train).any()
+        and
+        not np.isnan(X_validation).any()
+        and
+        not np.isnan(X_test).any()
+    )
+
+    # ==========================================
+    # NaN / Inf validation
     # ==========================================
 
     finite_validation = (
-        np.isfinite(
-            X_train_processed
-        ).all()
+        np.isfinite(X_train).all()
         and
-        np.isfinite(
-            X_validation_processed
-        ).all()
+        np.isfinite(X_validation).all()
         and
-        np.isfinite(
-            X_test_processed
-        ).all()
+        np.isfinite(X_test).all()
     )
 
     # ==========================================
-    # 13. Transformer validation
+    # Transformer validation
     # ==========================================
 
-    transformer_exists = os.path.exists(
+    transformer_saved = os.path.exists(
         preprocessing.transformer_path
     )
 
     # ==========================================
-    # 14. Final validation
+    # Imputed dataframe validation
+    # ==========================================
+
+    imputed_df_validation = (
+        preprocessing.train_imputed_df is not None
+        and
+        preprocessing.validation_imputed_df is not None
+        and
+        preprocessing.test_imputed_df is not None
+    )
+
+    # ==========================================
+    # BMI dataframe validation
+    # ==========================================
+
+    bmi_dataframe_validation = (
+        "BMI"
+        in preprocessing.train_imputed_df.columns
+        and
+        "BMI"
+        in preprocessing.validation_imputed_df.columns
+        and
+        "BMI"
+        in preprocessing.test_imputed_df.columns
+    )
+
+    # ==========================================
+    # Final validation
     # ==========================================
 
     overall_validation = (
@@ -285,12 +276,22 @@ if __name__ == "__main__":
         and
         feature_count_validation
         and
+        bmi_validation
+        and
+        missing_value_validation
+        and
         finite_validation
         and
-        imputation_validation
+        transformer_saved
         and
-        transformer_exists
+        imputed_df_validation
+        and
+        bmi_dataframe_validation
     )
+
+    # ==========================================
+    # 10. Validation report
+    # ==========================================
 
     print("\n")
     print("=" * 60)
@@ -308,8 +309,13 @@ if __name__ == "__main__":
     )
 
     print(
+        f"BMI feature check     : "
+        f"{'PASS' if bmi_validation else 'FAIL'}"
+    )
+
+    print(
         f"Missing-value check    : "
-        f"{'PASS' if imputation_validation else 'FAIL'}"
+        f"{'PASS' if missing_value_validation else 'FAIL'}"
     )
 
     print(
@@ -319,11 +325,22 @@ if __name__ == "__main__":
 
     print(
         f"Transformer saved      : "
-        f"{'PASS' if transformer_exists else 'FAIL'}"
+        f"{'PASS' if transformer_saved else 'FAIL'}"
     )
 
     print(
-        f"\nMetadata preprocessing validation: "
+        f"Imputed DataFrames     : "
+        f"{'PASS' if imputed_df_validation else 'FAIL'}"
+    )
+
+    print(
+        f"BMI DataFrame check    : "
+        f"{'PASS' if bmi_dataframe_validation else 'FAIL'}"
+    )
+
+    print(
+        f"\nMetadata preprocessing "
+        f"validation: "
         f"{'PASS' if overall_validation else 'FAIL'}"
     )
 
