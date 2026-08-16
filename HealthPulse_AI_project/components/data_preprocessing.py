@@ -337,6 +337,111 @@ class DataPreprocessing:
             signal_array,
             target_array
         )
+
+    def preprocess_single_ecg(
+        self,
+        filename_lr: str
+        ):
+        try:
+
+            logging.info(
+                f"Preprocessing single ECG: {filename_lr}"
+            )
+
+            # Load TRAIN-learned normalization parameters
+            if not os.path.exists(
+                self.normalization_path
+            ):
+                raise FileNotFoundError(
+                    "Normalization parameters not found: "
+                    f"{self.normalization_path}"
+                )
+
+            normalization_data = np.load(
+                self.normalization_path
+            )
+
+            mean = normalization_data["mean"]
+            std = normalization_data["std"]
+
+            # Validate normalization parameters
+            if mean.shape != (
+                self.expected_leads,
+            ):
+                raise ValueError(
+                    f"Invalid normalization mean shape: "
+                    f"{mean.shape}"
+                )
+
+            if std.shape != (
+                self.expected_leads,
+            ):
+                raise ValueError(
+                    f"Invalid normalization std shape: "
+                    f"{std.shape}"
+                )
+
+            if not np.isfinite(mean).all():
+                raise ValueError(
+                    "Normalization mean contains NaN or Inf"
+                )
+
+            if not np.isfinite(std).all():
+                raise ValueError(
+                    "Normalization std contains NaN or Inf"
+                )
+
+            # Load raw ECG using existing method
+            signal = self._load_ecg_signal(
+                filename_lr
+            )
+
+            # Apply SAME normalization used during training
+            normalized_signal = self._normalize_signal(
+                signal,
+                mean,
+                std
+            )
+
+            # Final validation
+            expected_shape = (
+                self.expected_samples,
+                self.expected_leads
+            )
+
+            if normalized_signal.shape != expected_shape:
+                raise ValueError(
+                    f"Unexpected processed ECG shape: "
+                    f"{normalized_signal.shape}"
+                )
+
+            if not np.isfinite(
+                normalized_signal
+            ).all():
+                raise ValueError(
+                    "Processed ECG contains NaN or Inf"
+                )
+
+            logging.info(
+                f"Single ECG preprocessing completed: "
+                f"{normalized_signal.shape}"
+            )
+
+            return normalized_signal.astype(
+                np.float32
+            )
+
+        except Exception as e:
+
+            logging.exception(
+                "Error occurred while preprocessing "
+                "single ECG"
+            )
+
+            raise HealthPulseException(
+                e,
+                sys
+            )
         
 
     # 8. Main preprocessing
